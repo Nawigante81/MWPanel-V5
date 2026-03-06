@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 339.93" role="img" aria-label="MW Panel">
+  <defs>
+    <style>
+      .c { fill:#009fe3; }
+      .t {
+        fill:#009fe3;
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-weight: 600;
+      }
+    </style>
+  </defs>
+
+  <!-- MW (oryginalny znak) -->
+  <path class="c" d="M677.75,2H583.57l43.54,206.36h.95ZM878,2H784.24l49.23,206.36h.95Zm30.29,337.93h43.22L1050.39,2h-43.23Zm-224.34,0h93.24L731.24,152.51h-1ZM98.45,2,0,339.93H129.21l43.54-206.36h.95l49.7,206.36H329.89l49.22-206.36h.95L423.6,339.93H552.81L454.36,2H322.79L276.88,189.42h-.95L229.55,2Z"></path>
+
+  <!-- Panel (bez tła) -->
+  <text class="t" x="1120" y="255" font-size="200" letter-spacing="0">Panel</text>
+</svg>

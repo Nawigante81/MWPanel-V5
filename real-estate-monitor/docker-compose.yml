@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # Baza danych PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: realestate-db
+    environment:
+      POSTGRES_DB: real_estate_monitor
+      POSTGRES_USER: realestate
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U realestate -d real_estate_monitor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: realestate-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # API
+  api:
+    build: .
+    container_name: realestate-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://realestate:${DB_PASSWORD:-dev_password}@db:5432/real_estate_monitor
+      DATABASE_URL_SYNC: postgresql://realestate:${DB_PASSWORD:-dev_password}@db:5432/real_estate_monitor
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      DEBUG: "false"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker
+  worker:
+    build: .
+    container_name: realestate-worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://realestate:${DB_PASSWORD:-dev_password}@db:5432/real_estate_monitor
+      DATABASE_URL_SYNC: postgresql://realestate:${DB_PASSWORD:-dev_password}@db:5432/real_estate_monitor
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+    depends_on:
+      - db
+      - redis
+      - api
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+
+  # Celery Beat (Scheduler)
+  beat:
+    build: .
+    container_name: realestate-beat
+    environment:
+      DATABASE_URL: postgresql+asyncpg://realestate:${DB_PASSWORD:-dev_password}@db:5432/real_estate_monitor
+      DATABASE_URL_SYNC: postgresql://realestate:${DB_PASSWORD:-dev_password}@db:5432/real_estate_monitor
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+    depends_on:
+      - db
+      - redis
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+
+  # Nginx (opcjonalnie, dla produkcji)
+  nginx:
+    image: nginx:alpine
+    container_name: realestate-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - api
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+  redis_data:
