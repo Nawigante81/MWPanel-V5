@@ -19,12 +19,14 @@ from app.tasks.scrape import scrape_source
 logger = get_logger("tasks.scheduler")
 
 
-# Default filter configurations
+# Default filter configurations — wszystkie główne regiony Polski
 DEFAULT_FILTERS = [
-    FilterConfig(
-        region="pomorskie",
-        transaction_type="sale",
-    ),
+    FilterConfig(region="pomorskie",     transaction_type="sale"),
+    FilterConfig(region="mazowieckie",   transaction_type="sale"),
+    FilterConfig(region="malopolskie",   transaction_type="sale"),
+    FilterConfig(region="slaskie",       transaction_type="sale"),
+    FilterConfig(region="dolnoslaskie",  transaction_type="sale"),
+    FilterConfig(region="wielkopolskie", transaction_type="sale"),
 ]
 
 
@@ -229,7 +231,9 @@ def seed_sources():
         {
             "name": "otodom",
             "enabled": True,
-            "fetch_mode": "http",
+            # Otodom i OLX to aplikacje Next.js — wymagają Playwright
+            # żeby wyrenderować JavaScript i pobrać __NEXT_DATA__
+            "fetch_mode": "playwright",
             "base_url": "https://www.otodom.pl",
             "interval_seconds": settings.otodom_interval_seconds,
             "rate_limit_rps": settings.otodom_rate_limit_rps,
@@ -237,14 +241,15 @@ def seed_sources():
         {
             "name": "olx",
             "enabled": True,
-            "fetch_mode": "http",
+            "fetch_mode": "playwright",
             "base_url": "https://www.olx.pl",
             "interval_seconds": settings.olx_interval_seconds,
             "rate_limit_rps": settings.olx_rate_limit_rps,
         },
         {
             "name": "facebook",
-            "enabled": True,
+            # Facebook wymaga ważnych cookies w FB_COOKIES_JSON — domyślnie wyłączony
+            "enabled": False,
             "fetch_mode": "playwright",
             "base_url": "https://www.facebook.com",
             "interval_seconds": settings.facebook_interval_seconds,

@@ -136,8 +136,8 @@ def _is_invalid_parse(offer: OfferNormalized) -> bool:
     if any(t in title for t in bad_title_tokens):
         return True
 
-    # Wymaganie: brak ceny => NULL + invalid_parse
-    if offer.price is None:
+    # Brak tytułu i ceny jednocześnie — prawdopodobnie błąd parsowania
+    if offer.price is None and not (offer.city or offer.area_m2 or offer.rooms):
         return True
 
     return False

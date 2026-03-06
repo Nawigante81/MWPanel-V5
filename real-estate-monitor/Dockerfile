@@ -22,6 +22,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Instalacja Playwright + przeglądarka Chromium (wymagane do scrapowania)
+RUN playwright install-deps chromium && \
+    playwright install chromium
+
 # Kopiowanie aplikacji
 COPY . .
 
