@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+
+  # -----------------------------------------------------------------------
+  # Baza danych PostgreSQL
+  # -----------------------------------------------------------------------
+  db:
+    image: postgres:15-alpine
+    container_name: mwpanel-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-real_estate_monitor}
+      POSTGRES_USER: ${DB_USER:-realestate}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-realestate} -d ${DB_NAME:-real_estate_monitor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # -----------------------------------------------------------------------
+  # Redis (cache + Celery broker)
+  # -----------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mwpanel-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # -----------------------------------------------------------------------
+  # FastAPI backend
+  # -----------------------------------------------------------------------
+  api:
+    build:
+      context: ./real-estate-monitor
+      dockerfile: Dockerfile
+    container_name: mwpanel-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-realestate}:${DB_PASSWORD}@db:5432/${DB_NAME:-real_estate_monitor}
+      DATABASE_URL_SYNC: postgresql://${DB_USER:-realestate}:${DB_PASSWORD}@db:5432/${DB_NAME:-real_estate_monitor}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      DEBUG: "false"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Opcjonalne integracje (odkomentuj w .env)
+      WA_TOKEN: ${WA_TOKEN:-}
+      WA_PHONE_NUMBER_ID: ${WA_PHONE_NUMBER_ID:-}
+      WA_TO: ${WA_TO:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FROM_EMAIL: ${FROM_EMAIL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # -----------------------------------------------------------------------
+  # Celery Worker
+  # -----------------------------------------------------------------------
+  worker:
+    build:
+      context: ./real-estate-monitor
+      dockerfile: Dockerfile
+    container_name: mwpanel-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-realestate}:${DB_PASSWORD}@db:5432/${DB_NAME:-real_estate_monitor}
+      DATABASE_URL_SYNC: postgresql://${DB_USER:-realestate}:${DB_PASSWORD}@db:5432/${DB_NAME:-real_estate_monitor}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    entrypoint: []
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+
+  # -----------------------------------------------------------------------
+  # Celery Beat (scheduler)
+  # -----------------------------------------------------------------------
+  beat:
+    build:
+      context: ./real-estate-monitor
+      dockerfile: Dockerfile
+    container_name: mwpanel-beat
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-realestate}:${DB_PASSWORD}@db:5432/${DB_NAME:-real_estate_monitor}
+      DATABASE_URL_SYNC: postgresql://${DB_USER:-realestate}:${DB_PASSWORD}@db:5432/${DB_NAME:-real_estate_monitor}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    entrypoint: []
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+
+  # -----------------------------------------------------------------------
+  # Frontend React (Nginx serwuje pliki statyczne + proxy /api -> backend)
+  # -----------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: mwpanel-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
